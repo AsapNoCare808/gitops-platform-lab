@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AWS Banking-Grade Platform — Architecture</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0e1a;
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  .page {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  /* HEADER */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 40px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #1e2d45;
+  }
+  .header-left h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: -0.3px;
+  }
+  .header-left p {
+    font-size: 13px;
+    color: #64748b;
+    margin-top: 4px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .badge {
+    background: #0f2942;
+    border: 1px solid #1e4976;
+    color: #60a5fa;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+  }
+
+  /* MAIN DIAGRAM */
+  .aws-cloud {
+    border: 1.5px solid #1e3a5f;
+    border-radius: 12px;
+    padding: 28px;
+    background: #0d1526;
+    position: relative;
+    margin-bottom: 28px;
+  }
+  .cloud-label {
+    position: absolute;
+    top: -12px;
+    left: 20px;
+    background: #0d1526;
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #f59e0b;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .cloud-label .dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    background: #f59e0b;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* VPC */
+  .vpc {
+    border: 1.5px dashed #1e4976;
+    border-radius: 10px;
+    padding: 24px;
+    background: #0a1628;
+    position: relative;
+  }
+  .vpc-label {
+    position: absolute;
+    top: -11px; left: 16px;
+    background: #0a1628;
+    padding: 0 8px;
+    font-size: 11px;
+    color: #3b82f6;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+  }
+
+  /* AZ ROW */
+  .az-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .az {
+    border: 1px solid #1a2d45;
+    border-radius: 8px;
+    padding: 14px;
+    background: #0f1e35;
+    position: relative;
+  }
+  .az-label {
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #475569;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+  }
+  .subnet {
+    border-radius: 5px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .subnet:last-child { margin-bottom: 0; }
+  .subnet.public {
+    background: #0f2d1e;
+    border: 1px solid #14532d;
+    color: #4ade80;
+  }
+  .subnet.private {
+    background: #1e1b4b;
+    border: 1px solid #312e81;
+    color: #a5b4fc;
+  }
+  .subnet-icon { font-size: 14px; }
+  .subnet-text { font-size: 11px; }
+  .subnet-sub {
+    font-size: 10px;
+    font-weight: 400;
+    opacity: 0.7;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  /* EKS CLUSTER */
+  .eks-cluster {
+    border: 1.5px solid #2563eb;
+    border-radius: 10px;
+    padding: 20px;
+    background: #0c1a3a;
+    position: relative;
+    margin-bottom: 20px;
+  }
+  .eks-label {
+    position: absolute;
+    top: -11px; left: 16px;
+    background: #0c1a3a;
+    padding: 0 8px;
+    font-size: 11px;
+    color: #60a5fa;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+  .eks-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .eks-component {
+    background: #0f2042;
+    border: 1px solid #1e3a6e;
+    border-radius: 7px;
+    padding: 12px 10px;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+  .eks-component:hover { border-color: #3b82f6; }
+  .eks-component .icon { font-size: 20px; margin-bottom: 6px; }
+  .eks-component .name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #93c5fd;
+    line-height: 1.3;
+  }
+  .eks-component .tech {
+    font-size: 10px;
+    color: #475569;
+    font-family: 'IBM Plex Mono', monospace;
+    margin-top: 3px;
+  }
+
+  /* BOTTOM ROW */
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    margin-top: 4px;
+  }
+  .infra-box {
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .infra-box.storage {
+    background: #1a1200;
+    border: 1px solid #78350f;
+  }
+  .infra-box.security {
+    background: #1a0e00;
+    border: 1px solid #7c2d12;
+  }
+  .infra-box.dns {
+    background: #0f1a2e;
+    border: 1px solid #1e3a5f;
+  }
+  .infra-box .box-icon { font-size: 24px; }
+  .infra-box .box-content {}
+  .infra-box .box-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 3px;
+  }
+  .infra-box .box-detail {
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: #64748b;
+    line-height: 1.5;
+  }
+
+  /* CI/CD FLOW */
+  .cicd-section {
+    margin-bottom: 28px;
+  }
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 14px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: #0d1526;
+    border: 1px solid #1e2d45;
+    border-radius: 10px;
+    padding: 16px 20px;
+    overflow-x: auto;
+  }
+  .pipe-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 90px;
+  }
+  .pipe-icon {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    margin-bottom: 7px;
+    font-weight: 700;
+  }
+  .pipe-icon.validate { background: #0f2942; border: 1px solid #1e4976; }
+  .pipe-icon.plan { background: #1a1a0f; border: 1px solid #3d3a00; }
+  .pipe-icon.scan { background: #2d0f0f; border: 1px solid #7f1d1d; }
+  .pipe-icon.apply { background: #0f2d1e; border: 1px solid #14532d; }
+  .pipe-icon.gitops { background: #1e0f2d; border: 1px solid #4c1d95; }
+  .pipe-icon.notify { background: #0f1e35; border: 1px solid #1e3a5f; }
+  .pipe-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-align: center;
+  }
+  .pipe-sub {
+    font-size: 9px;
+    color: #475569;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .pipe-arrow {
+    color: #1e3a5f;
+    font-size: 18px;
+    margin: 0 4px;
+    flex-shrink: 0;
+    margin-bottom: 22px;
+  }
+
+  /* SECURITY CALLOUTS */
+  .security-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .sec-card {
+    background: #0d1526;
+    border: 1px solid #1e2d45;
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .sec-card .sec-icon { font-size: 20px; margin-bottom: 8px; }
+  .sec-card .sec-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 5px;
+  }
+  .sec-card .sec-detail {
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.5;
+  }
+  .sec-card .sec-badge {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+  }
+  .badge-green { background: #052e16; color: #4ade80; border: 1px solid #14532d; }
+  .badge-blue { background: #0f2942; color: #60a5fa; border: 1px solid #1e4976; }
+  .badge-orange { background: #1c0a00; color: #fb923c; border: 1px solid #7c2d12; }
+  .badge-purple { background: #1e0f2d; color: #c084fc; border: 1px solid #4c1d95; }
+
+  /* METRICS */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+  .metric-card {
+    background: #0d1526;
+    border: 1px solid #1e2d45;
+    border-radius: 8px;
+    padding: 16px 14px;
+    text-align: center;
+  }
+  .metric-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #60a5fa;
+    font-family: 'IBM Plex Mono', monospace;
+    margin-bottom: 4px;
+  }
+  .metric-label {
+    font-size: 11px;
+    color: #64748b;
+    line-height: 1.4;
+  }
+
+  /* FOOTER */
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 20px;
+    border-top: 1px solid #1e2d45;
+    font-size: 11px;
+    color: #475569;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+  .footer strong { color: #94a3b8; }
+
+  /* STACK TAGS */
+  .stack-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 28px;
+  }
+  .tag {
+    padding: 4px 12px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-weight: 600;
+    border: 1px solid;
+  }
+  .tag.aws { background: #1c0a00; color: #fb923c; border-color: #7c2d12; }
+  .tag.k8s { background: #0f2942; color: #60a5fa; border-color: #1e4976; }
+  .tag.iac { background: #1e0f2d; color: #c084fc; border-color: #4c1d95; }
+  .tag.gitops { background: #0f2d1e; color: #4ade80; border-color: #14532d; }
+  .tag.obs { background: #1a1200; color: #fbbf24; border-color: #78350f; }
+  .tag.sec { background: #2d0f0f; color: #f87171; border-color: #7f1d1d; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>🏦 AWS Banking-Grade Platform</h1>
+      <p>Architecture — Production Ready / Multi-AZ / Zero Trust</p>
+    </div>
+    <div class="badge">v1.0 — Maxime Toris</div>
+  </div>
+
+  <!-- STACK TAGS -->
+  <div class="stack-row">
+    <span class="tag aws">AWS</span>
+    <span class="tag k8s">EKS · Kubernetes</span>
+    <span class="tag iac">Terraform · IaC</span>
+    <span class="tag gitops">ArgoCD · GitOps</span>
+    <span class="tag k8s">GitLab CI/CD</span>
+    <span class="tag obs">Grafana · Prometheus</span>
+    <span class="tag k8s">Karpenter</span>
+    <span class="tag sec">KMS · IRSA · Checkov</span>
+    <span class="tag iac">Helm · Kustomize</span>
+  </div>
+
+  <!-- AWS CLOUD -->
+  <div class="aws-cloud">
+    <div class="cloud-label"><span class="dot"></span>AWS Cloud — Region eu-west-1</div>
+
+    <!-- VPC -->
+    <div class="vpc">
+      <div class="vpc-label">🌐 VPC — 10.0.0.0/16 — Multi-AZ (3 zones)</div>
+
+      <!-- AZ ROW -->
+      <div class="az-row">
+        <div class="az">
+          <div class="az-label">⚡ AZ — eu-west-1a</div>
+          <div class="subnet public"><span class="subnet-icon">🌍</span><div><div class="subnet-text">Public Subnet</div><div class="subnet-sub">NAT Gateway</div></div></div>
+          <div class="subnet private"><span class="subnet-icon">🔒</span><div><div class="subnet-text">Private Subnet</div><div class="subnet-sub">EKS Nodes</div></div></div>
+        </div>
+        <div class="az">
+          <div class="az-label">⚡ AZ — eu-west-1b</div>
+          <div class="subnet public"><span class="subnet-icon">🌍</span><div><div class="subnet-text">Public Subnet</div><div class="subnet-sub">ALB</div></div></div>
+          <div class="subnet private"><span class="subnet-icon">🔒</span><div><div class="subnet-text">Private Subnet</div><div class="subnet-sub">EKS Nodes</div></div></div>
+        </div>
+        <div class="az">
+          <div class="az-label">⚡ AZ — eu-west-1c</div>
+          <div class="subnet public"><span class="subnet-icon">🌍</span><div><div class="subnet-text">Public Subnet</div><div class="subnet-sub">ALB</div></div></div>
+          <div class="subnet private"><span class="subnet-icon">🔒</span><div><div class="subnet-text">Private Subnet</div><div class="subnet-sub">EKS Nodes</div></div></div>
+        </div>
+      </div>
+
+      <!-- EKS CLUSTER -->
+      <div class="eks-cluster">
+        <div class="eks-label">☸️ EKS Cluster — Kubernetes 1.29+</div>
+        <div class="eks-grid">
+          <div class="eks-component">
+            <div class="icon">🔄</div>
+            <div class="name">ArgoCD</div>
+            <div class="tech">GitOps · Auto-sync</div>
+          </div>
+          <div class="eks-component">
+            <div class="icon">⚡</div>
+            <div class="name">Karpenter</div>
+            <div class="tech">Node Autoscaling</div>
+          </div>
+          <div class="eks-component">
+            <div class="icon">⚖️</div>
+            <div class="name">ALB Controller</div>
+            <div class="tech">Ingress / LB</div>
+          </div>
+          <div class="eks-component">
+            <div class="icon">📊</div>
+            <div class="name">Prometheus</div>
+            <div class="tech">Metrics · Alerts</div>
+          </div>
+          <div class="eks-component">
+            <div class="icon">📈</div>
+            <div class="name">Grafana</div>
+            <div class="tech">Dashboards</div>
+          </div>
+          <div class="eks-component">
+            <div class="icon">🔐</div>
+            <div class="name">IRSA</div>
+            <div class="tech">IAM · Zero Creds</div>
+          </div>
+          <div class="eks-component">
+            <div class="icon">🌐</div>
+            <div class="name">External DNS</div>
+            <div class="tech">Route 53 Sync</div>
+          </div>
+          <div class="eks-component">
+            <div class="icon">📦</div>
+            <div class="name">Helm / Kustomize</div>
+            <div class="tech">Packaging</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM ROW -->
+      <div class="bottom-row">
+        <div class="infra-box storage">
+          <div class="box-icon">🗄️</div>
+          <div class="box-content">
+            <div class="box-title">State Backend</div>
+            <div class="box-detail">S3 — Terraform State<br>DynamoDB — State Lock</div>
+          </div>
+        </div>
+        <div class="infra-box security">
+          <div class="box-icon">🔑</div>
+          <div class="box-content">
+            <div class="box-title">Chiffrement & IAM</div>
+            <div class="box-detail">KMS — Secrets EKS + EBS<br>IAM Roles — Least Privilege</div>
+          </div>
+        </div>
+        <div class="infra-box dns">
+          <div class="box-icon">🌐</div>
+          <div class="box-content">
+            <div class="box-title">DNS & Certificats</div>
+            <div class="box-detail">Route 53 — DNS<br>ACM — TLS Certificates</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CI/CD PIPELINE -->
+  <div class="cicd-section">
+    <div class="section-title">// Pipeline GitLab CI → Terraform → EKS</div>
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-icon validate">📝</div>
+        <div class="pipe-name">Validate</div>
+        <div class="pipe-sub">fmt + validate<br>tflint</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="pipe-icon plan">📋</div>
+        <div class="pipe-name">Plan</div>
+        <div class="pipe-sub">terraform plan<br>output MR</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="pipe-icon scan">🔍</div>
+        <div class="pipe-name">Security Scan</div>
+        <div class="pipe-sub">Checkov<br>IaC SAST</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="pipe-icon apply">✅</div>
+        <div class="pipe-name">Apply</div>
+        <div class="pipe-sub">Manuel — main<br>terraform apply</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="pipe-icon gitops">🔄</div>
+        <div class="pipe-name">GitOps Sync</div>
+        <div class="pipe-sub">ArgoCD trigger<br>auto-heal</div>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pipe-step">
+        <div class="pipe-icon notify">🔔</div>
+        <div class="pipe-name">Notify</div>
+        <div class="pipe-sub">Teams / Slack<br>status report</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SECURITY CALLOUTS -->
+  <div class="section-title">// Sécurité & Conformité — Banking Grade</div>
+  <div class="security-row">
+    <div class="sec-card">
+      <div class="sec-icon">🔒</div>
+      <div class="sec-title">Réseau Zero Trust</div>
+      <div class="sec-detail">Nodes 100% en subnets privés. Aucune IP publique exposée sur les workloads.</div>
+      <div class="sec-badge badge-green">Réseau isolé</div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-icon">🗝️</div>
+      <div class="sec-title">IRSA — Zero Credentials</div>
+      <div class="sec-detail">IAM Roles for Service Accounts. Aucun access key dans le code ou les containers.</div>
+      <div class="sec-badge badge-blue">0 credential hardcodé</div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-icon">📜</div>
+      <div class="sec-title">Audit Trail Complet</div>
+      <div class="sec-detail">Remote state S3 + verrou DynamoDB. Toutes les modifs passent par GitLab CI.</div>
+      <div class="sec-badge badge-orange">Traçabilité totale</div>
+    </div>
+    <div class="sec-card">
+      <div class="sec-icon">🛡️</div>
+      <div class="sec-title">IaC Security Scan</div>
+      <div class="sec-detail">Checkov intégré dans le pipeline. Scan automatique de chaque PR avant apply.</div>
+      <div class="sec-badge badge-purple">SAST infra</div>
+    </div>
+  </div>
+
+  <!-- METRICS -->
+  <div class="section-title">// Métriques Clés</div>
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="metric-value">&lt; 30'</div>
+      <div class="metric-label">Déploiement complet from scratch</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">99.9%</div>
+      <div class="metric-label">Disponibilité cible (Multi-AZ)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">&lt; 60s</div>
+      <div class="metric-label">Scale-out nouveau node (Karpenter)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">0</div>
+      <div class="metric-label">Credentials hardcodés dans le code</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">100%</div>
+      <div class="metric-label">Couverture scan sécurité IaC</div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div><strong>Maxime Toris</strong> — Ingénieur SRE / Platform Engineer Senior</div>
+    <div>flmaxto@gmail.com · AWS SysOps Certified · 7 ans d'expérience</div>
+  </div>
+
+</div>
+</body>
+</html>
