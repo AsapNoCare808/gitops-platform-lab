@@ -226,3 +226,7 @@ terraform init && terraform apply
 
 > *Ce projet est un portfolio technique démontrant la mise en place d'une infrastructure AWS production-ready.  
 > Il évolue en parallèle des certifications AWS Solutions Architect & DevOps Engineer Professional.*
+
+
+
+![Architecture](docs/architecture.png)
