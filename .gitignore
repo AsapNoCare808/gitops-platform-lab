@@ -1,0 +1,5 @@
+docs/credentials.md
+keypairs/
+*.pem
+*.key
+.env
