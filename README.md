@@ -1,232 +1,114 @@
-# 🏦 AWS Banking-Grade Platform
+# Maxto Platform — Stack GitOps Lab
 
-> Infrastructure AWS production-ready, sécurisée et conforme aux standards bancaires.  
-> Déployable intégralement via IaC en moins de 30 minutes.
-
----
-
-## 🎯 Objectif
-
-Ce projet implémente une plateforme cloud **enterprise-grade** sur AWS, conçue pour répondre aux exigences de disponibilité, sécurité et traçabilité des environnements bancaires et grands comptes.
-
-Elle sert de **socle réutilisable** pour déployer des workloads containerisés en production, avec :
-- Zéro credential hardcodé
-- Zéro intervention manuelle hors pipeline
-- Traçabilité complète de chaque changement infrastructure
+> Pipeline de livraison logicielle complet et autonome, du commit au déploiement, avec sécurité et observabilité intégrées.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          AWS Cloud                              │
-│                                                                 │
-│   ┌──────────────────────────────────────────────────────┐      │
-│   │                    VPC (Multi-AZ)                    │      │
-│   │                                                      │      │
-│   │  ┌─────────────┐   ┌─────────────┐  ┌────────────┐  │      │
-│   │  │  Public     │   │  Private    │  │  Private   │  │      │
-│   │  │  Subnet AZ1 │   │  Subnet AZ1 │  │  Subnet AZ2│  │      │
-│   │  │  (NAT GW)   │   │  (EKS Node) │  │  (EKS Node)│  │      │
-│   │  └─────────────┘   └──────┬──────┘  └─────┬──────┘  │      │
-│   │                           │               │          │      │
-│   │              ┌────────────▼───────────────▼──┐       │      │
-│   │              │        EKS Cluster             │       │      │
-│   │              │   ┌──────────────────────┐    │       │      │
-│   │              │   │  ArgoCD (GitOps)     │    │       │      │
-│   │              │   │  Karpenter (Scaling) │    │       │      │
-│   │              │   │  ALB Controller      │    │       │      │
-│   │              │   │  Prometheus + Grafana│    │       │      │
-│   │              │   └──────────────────────┘    │       │      │
-│   │              └───────────────────────────────┘       │      │
-│   │                                                      │      │
-│   │  ┌──────────────────┐     ┌───────────────────────┐  │      │
-│   │  │  S3 (TF State)   │     │  KMS (Chiffrement)    │  │      │
-│   │  │  DynamoDB (Lock) │     │  IAM / IRSA            │  │      │
-│   │  └──────────────────┘     └───────────────────────┘  │      │
-│   └──────────────────────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    DEV[👨‍💻 Developer<br/>git push] --> GL[GitLab CI<br/>gitlab.com]
 
-GitLab CI ──► Terraform Plan/Apply ──► EKS
-                                        ▲
-GitLab Repo ──► ArgoCD Sync ────────────┘
+    subgraph CI ["Pipeline CI (gitlab.com)"]
+        GL --> T[Tests unitaires<br/>golang:1.22]
+        T --> B[Build image Docker<br/>registry.gitlab.com]
+        B --> SC[Scan CVE<br/>Trivy]
+        SC --> DD[Rapport vulnérabilités<br/>DefectDojo]
+        SC --> UM[Bump image tag<br/>infra-k8s repo]
+    end
+
+    subgraph VPS ["VPS Ionos — 217.160.246.204 (k3s)"]
+        subgraph GITOPS ["GitOps"]
+            ARGO[ArgoCD<br/>argocd.maxto-platform.cloud]
+        end
+
+        subgraph APP ["app-demo namespace"]
+            APPDEMO[app-demo<br/>app.maxto-platform.cloud]
+        end
+
+        subgraph OBS ["monitoring namespace"]
+            PROM[Prometheus]
+            GRAF[Grafana<br/>grafana.maxto-platform.cloud]
+            PROM --> GRAF
+            APPDEMO -- /metrics --> PROM
+        end
+
+        subgraph SEC ["defectdojo namespace"]
+            DOJO[DefectDojo<br/>defectdojo.maxto-platform.cloud]
+        end
+    end
+
+    UM -- "git commit bump" --> ARGO
+    ARGO -- "sync automatique" --> APPDEMO
+    DD -- "import scan" --> DOJO
+
+    style CI fill:#fef3c7,stroke:#d97706
+    style VPS fill:#eff6ff,stroke:#3b82f6
+    style GITOPS fill:#f0fdf4,stroke:#22c55e
+    style APP fill:#f0fdf4,stroke:#22c55e
+    style OBS fill:#f0fdf4,stroke:#22c55e
+    style SEC fill:#fff1f2,stroke:#ef4444
 ```
 
 ---
 
-## 🔐 Sécurité & Conformité (Banking-Grade)
-
-### Réseau
-| Principe | Implémentation |
-|---|---|
-| Isolation des workloads | Nodes EKS en subnets **100% privés** |
-| Sortie contrôlée | NAT Gateway — aucune IP publique sur les nodes |
-| Segmentation | Security Groups stricts par couche (ALB / Nodes / RDS) |
-
-### Gestion des accès
-| Principe | Implémentation |
-|---|---|
-| Zéro credential hardcodé | **IRSA** (IAM Roles for Service Accounts) |
-| Moindre privilège | Un rôle IAM dédié par composant Terraform |
-| Chiffrement au repos | **KMS** sur secrets EKS, volumes EBS, buckets S3 |
-
-### Traçabilité & Audit
-| Principe | Implémentation |
-|---|---|
-| État infrastructure versionné | Remote state S3 + verrou **DynamoDB** |
-| Zéro apply manuel | Toutes les modifications passent par **GitLab CI** |
-| Audit trail complet | Historique Git = historique des changements infra |
-| Scan sécurité IaC | **Checkov** intégré dans le pipeline (SAST infra) |
-
-### Résilience
-| Principe | Implémentation |
-|---|---|
-| Haute disponibilité | Multi-AZ (3 zones) par défaut |
-| Auto-healing | ArgoCD corrige automatiquement toute dérive |
-| Autoscaling intelligent | **Karpenter** — scale nodes en < 60 secondes |
-
----
-
-## 🔄 Pipeline CI/CD
+## Le parcours d'un commit
 
 ```
-Push GitLab
-    │
-    ▼
-┌─────────────┐
-│  validate   │ ← terraform fmt + validate + tflint
-└──────┬──────┘
-       │
-    ▼
-┌─────────────┐
-│    plan     │ ← terraform plan (output lisible en MR)
-└──────┬──────┘
-       │
-    ▼
-┌─────────────┐
-│ security-   │ ← Checkov (scan failles IaC)
-│   scan      │
-└──────┬──────┘
-       │
-    ▼
-┌─────────────┐
-│    apply    │ ← Manuel sur branche main uniquement
-└──────┬──────┘
-       │
-    ▼
-┌─────────────┐
-│ gitops-sync │ ← Trigger ArgoCD sync
-└──────┬──────┘
-       │
-    ▼
-┌─────────────┐
-│   notify    │ ← Notification Teams / Slack
-└─────────────┘
+git push
+  └── GitLab CI
+        ├── 1. unit-tests       → go test ./...
+        ├── 2. build-image      → docker build + push registry.gitlab.com
+        ├── 3. trivy-scan       → scan CVE (CRITICAL bloquant)
+        ├── 4. upload-defectdojo→ rapport JSON → DefectDojo
+        └── 5. update-manifests → bump image tag dans infra-k8s
+
+ArgoCD détecte le changement dans infra-k8s
+  └── Déploie automatiquement sur k3s
+        └── App live sur https://app.maxto-platform.cloud
 ```
 
 ---
 
-## 📦 Stack technique
+## Stack technique
 
-| Catégorie | Outil | Version |
-|---|---|---|
-| Cloud | AWS | — |
-| Orchestration | EKS (Kubernetes) | 1.29+ |
-| IaC | Terraform | >= 1.6 |
-| GitOps | ArgoCD | 2.x |
-| Autoscaling | Karpenter | 0.x |
-| CI/CD | GitLab CI | — |
-| Packaging | Helm + Kustomize | — |
-| Monitoring | Prometheus + Grafana | — |
-| Sécurité IaC | Checkov | — |
-| Chiffrement | AWS KMS | — |
-
----
-
-## 📁 Structure du projet
-
-```
-aws-banking-platform/
-│
-├── terraform/
-│   ├── 00-bootstrap/       # S3 backend + DynamoDB state lock
-│   ├── 01-network/         # VPC, subnets, NAT GW, Security Groups
-│   ├── 02-security/        # IAM roles, KMS, IRSA
-│   ├── 03-eks/             # Cluster EKS + node groups
-│   ├── 04-addons/          # ALB Controller, External DNS, Karpenter
-│   └── 05-observability/   # Prometheus, Grafana, AlertManager
-│
-├── gitops/
-│   ├── apps/               # Définition ArgoCD des applications
-│   └── infra/              # Helm charts + Kustomize overlays
-│
-├── .gitlab-ci.yml          # Pipeline CI/CD complet
-│
-└── docs/
-    ├── architecture.png    # Schéma d'architecture
-    ├── security.md         # Détail des choix sécurité
-    └── runbook.md          # Procédures opérationnelles
-```
+| Couche | Outil | URL |
+|--------|-------|-----|
+| Orchestration | k3s (Kubernetes) | VPS Ionos 4vCPU/8Go |
+| CI/CD | GitLab CI | gitlab.com/Mtoris |
+| GitOps | ArgoCD | http://argocd.maxto-platform.cloud |
+| Registry | GitLab Registry | registry.gitlab.com/mtoris |
+| Scan CVE | Trivy | intégré pipeline |
+| Gestion vulnérabilités | DefectDojo | https://defectdojo.maxto-platform.cloud |
+| Métriques | Prometheus + Grafana | http://grafana.maxto-platform.cloud |
+| TLS | cert-manager + Let's Encrypt | automatique |
+| Ingress | nginx-ingress | hostPort 80/443 |
 
 ---
 
-## ⚡ Déploiement rapide
+## Repos
 
-```bash
-# 1. Bootstrap — initialiser le backend Terraform
-cd terraform/00-bootstrap
-terraform init && terraform apply
-
-# 2. Network — déployer le VPC
-cd ../01-network
-terraform init && terraform apply
-
-# 3. Security — IAM + KMS
-cd ../02-security
-terraform init && terraform apply
-
-# 4. EKS — déployer le cluster
-cd ../03-eks
-terraform init && terraform apply
-
-# 5. Addons — Karpenter, ALB, ArgoCD
-cd ../04-addons
-terraform init && terraform apply
-
-# 6. Observabilité — Grafana + Prometheus
-cd ../05-observability
-terraform init && terraform apply
-```
-
-> ⏱️ Temps de déploiement estimé : **25–30 minutes** sur un environnement vierge.
+| Repo | Rôle |
+|------|------|
+| [platform-config](https://gitlab.com/Mtoris/platform-config) | ArgoCD App of Apps — source de vérité GitOps |
+| [infra-k8s](https://gitlab.com/Mtoris/infra-k8s) | Manifests Kubernetes (deployments, services, ingress) |
+| [app-demo](https://gitlab.com/Mtoris/app-demo) | Microservice Go + pipeline CI/CD complet |
 
 ---
 
-## 📊 Métriques clés
+## Sécurité by design
 
-| Indicateur | Valeur |
-|---|---|
-| Temps de déploiement complet | < 30 min |
-| Disponibilité cible | 99.9% (Multi-AZ) |
-| Temps de scale-out (nouveau node) | < 60 secondes (Karpenter) |
-| Credentials hardcodés | **0** |
-| Couverture scan sécurité IaC | 100% des modules Terraform |
+- Aucun accès direct au cluster — tout passe par ArgoCD
+- Chaque image scannée par Trivy avant déploiement
+- CVE centralisées dans DefectDojo avec historique
+- Secrets dans Kubernetes Secrets, jamais dans le code
+- TLS automatique via cert-manager + Let's Encrypt
 
 ---
 
-## 👤 Auteur
+## Auteur
 
-**Maxime Toris** — Ingénieur SRE / Platform Engineer Senior  
-7 ans d'expérience en environnements critiques (BNP, CNAM)  
-📧 flmaxto@gmail.com | 📱 06 26 10 42 51  
-🔗 [LinkedIn](#) | AWS SysOps Certified
-
----
-
-> *Ce projet est un portfolio technique démontrant la mise en place d'une infrastructure AWS production-ready.  
-> Il évolue en parallèle des certifications AWS Solutions Architect & DevOps Engineer Professional.*
-
-
-
-![Architecture](docs/architecture.png)
+**Maxime Toris** — Platform Engineer / SRE  
+📧 toris.maxime@gmail.com  
+🔗 [GitLab](https://gitlab.com/Mtoris)

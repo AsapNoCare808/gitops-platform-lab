@@ -1,0 +1,103 @@
+# =============================================================================
+# GitLab CE - Valeurs Helm optimisées pour 8Go RAM (lab/démo)
+# Remplacer maxto-platform.cloud par votre domaine réel (ex: monlab.dev)
+# =============================================================================
+
+global:
+  edition: ce
+  hosts:
+    domain: maxto-platform.cloud                # ex: monlab.dev → GitLab sur gitlab.monlab.dev
+    https: false
+  ingress:
+    class: nginx
+    configureCertmanager: false
+    annotations: {}
+  initialRootPassword:
+    secret: gitlab-root-password
+    key: password
+  trusted_proxies:
+    - 10.42.0.0/16    # k3s pod CIDR (nginx-ingress pods)
+    - 10.43.0.0/16    # k3s service CIDR
+
+# Désactiver les composants non essentiels pour économiser la RAM
+certmanager:
+  installCRDs: false
+
+nginx-ingress:
+  enabled: false                  # On utilise notre nginx-ingress déjà installé
+
+prometheus:
+  install: false                  # On utilisera un Prometheus séparé si besoin
+
+gitlab-runner:
+  install: true
+  gitlabUrl: http://gitlab.maxto-platform.cloud
+  rbac:
+    create: true
+  runners:
+    privileged: true              # Nécessaire pour docker-in-docker (build images)
+    secret: gitlab-runner-secret  # authentication token (nouvelle méthode GitLab 17+)
+    config: |
+      [[runners]]
+        request_concurrency = 4
+        [runners.kubernetes]
+          namespace = "gitlab"
+          image = "ubuntu:22.04"
+          privileged = true
+          pull_policy = "if-not-present"
+
+# Réduction des ressources pour tenir dans 8Go
+gitlab:
+  webservice:
+    minReplicas: 1
+    maxReplicas: 1
+    resources:
+      requests:
+        memory: 1.2G
+        cpu: 200m
+      limits:
+        memory: 2G
+  sidekiq:
+    minReplicas: 1
+    maxReplicas: 1
+    concurrency: 10               # Réduit de 25 (défaut) → moins de contention Redis/AtomicProcessingService
+    resources:
+      requests:
+        memory: 600M
+        cpu: 100m
+      limits:
+        memory: 2G
+  gitaly:
+    resources:
+      requests:
+        memory: 200M
+        cpu: 100m
+      limits:
+        memory: 400M
+  toolbox:
+    resources:
+      requests:
+        memory: 64M
+        cpu: 50m
+
+registry:
+  enabled: true
+  resources:
+    requests:
+      memory: 64M
+
+minio:
+  resources:
+    requests:
+      memory: 128M
+
+redis:
+  resources:
+    requests:
+      memory: 64M
+
+postgresql:
+  primary:
+    resources:
+      requests:
+        memory: 256M
