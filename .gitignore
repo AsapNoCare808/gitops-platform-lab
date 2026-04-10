@@ -1,5 +1,8 @@
 docs/credentials.md
 keypairs/
+.claude/
+gitlab_ci/
+CLAUDE.md
 *.pem
 *.key
 .env
