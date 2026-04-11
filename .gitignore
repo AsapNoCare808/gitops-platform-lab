@@ -7,3 +7,6 @@ CLAUDE.md
 *.pem
 *.key
 .env
+**/.terraform/
+*.tfstate
+*.tfstate.backup
