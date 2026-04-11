@@ -1,6 +1,5 @@
 # =============================================================================
 # GitLab CE - Valeurs Helm optimisées pour 8Go RAM (lab/démo)
-# Remplacer maxto-platform.cloud par votre domaine réel (ex: monlab.dev)
 # =============================================================================
 
 global:
