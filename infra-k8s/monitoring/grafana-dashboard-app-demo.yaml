@@ -1,0 +1,150 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-app-demo
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  app-demo.json: |
+    {
+      "title": "app-demo",
+      "uid": "app-demo-dashboard",
+      "tags": ["app-demo", "gitops"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Requêtes HTTP / sec",
+          "type": "timeseries",
+          "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "sum(rate(app_demo_http_requests_total[1m])) by (endpoint, status)",
+              "legendFormat": "{{endpoint}} - {{status}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqps",
+              "color": { "mode": "palette-classic" }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "title": "Latence P99 / P50 (secondes)",
+          "type": "timeseries",
+          "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(app_demo_http_duration_seconds_bucket[1m])) by (le, endpoint))",
+              "legendFormat": "p99 {{endpoint}}"
+            },
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(app_demo_http_duration_seconds_bucket[1m])) by (le, endpoint))",
+              "legendFormat": "p50 {{endpoint}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "color": { "mode": "palette-classic" }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "title": "Total requêtes (compteur)",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+          "targets": [
+            {
+              "expr": "sum(app_demo_http_requests_total)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "title": "Taux d'erreurs 5xx",
+          "type": "stat",
+          "gridPos": { "x": 6, "y": 8, "w": 6, "h": 4 },
+          "targets": [
+            {
+              "expr": "sum(rate(app_demo_http_requests_total{status=~\"5..\"}[5m])) / sum(rate(app_demo_http_requests_total[5m])) * 100"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "yellow", "value": 1 },
+                  { "color": "red", "value": 5 }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "title": "Répartition par endpoint",
+          "type": "piechart",
+          "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+          "targets": [
+            {
+              "expr": "sum(increase(app_demo_http_requests_total[1h])) by (endpoint)",
+              "legendFormat": "{{endpoint}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" }
+            }
+          }
+        },
+        {
+          "id": 6,
+          "title": "Version de l'application",
+          "type": "stat",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 3 },
+          "targets": [
+            {
+              "expr": "app_demo_info",
+              "legendFormat": "v{{version}} — built {{build_time}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [{ "color": "blue", "value": null }]
+              },
+              "mappings": [
+                { "type": "value", "options": { "1": { "text": "running" } } }
+              ]
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "textMode": "name"
+          }
+        }
+      ]
+    }

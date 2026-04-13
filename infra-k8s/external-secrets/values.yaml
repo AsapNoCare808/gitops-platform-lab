@@ -1,0 +1,27 @@
+# External Secrets Operator
+# helm repo add external-secrets https://charts.external-secrets.io
+# helm upgrade --install external-secrets external-secrets/external-secrets \
+#   --namespace external-secrets --create-namespace -f values.yaml
+
+resources:
+  requests:
+    memory: 64Mi
+    cpu: 50m
+  limits:
+    memory: 128Mi
+
+webhook:
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 25m
+    limits:
+      memory: 64Mi
+
+certController:
+  resources:
+    requests:
+      memory: 32Mi
+      cpu: 25m
+    limits:
+      memory: 64Mi

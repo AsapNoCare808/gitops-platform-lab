@@ -1,0 +1,32 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: registry.gitlab.com/mtoris/portfolio
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+
+build-image:
+  stage: build
+  tags:
+    - shell
+    - docker
+  script:
+    - docker login registry.gitlab.com -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+    - docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+    - docker push $IMAGE_NAME:latest
+
+update-manifests:
+  stage: deploy
+  tags:
+    - shell
+  script:
+    - git clone https://ci-bot:$INFRA_DEPLOY_TOKEN@gitlab.com/Mtoris/infra-k8s.git
+    - cd infra-k8s
+    - sed -i "s|registry.gitlab.com/mtoris/portfolio:.*|registry.gitlab.com/mtoris/portfolio:$IMAGE_TAG|g" portfolio/deployment.yaml
+    - git config user.email "ci@maxto-platform.cloud"
+    - git config user.name "CI Bot"
+    - git add portfolio/deployment.yaml
+    - 'git diff --cached --quiet || git commit -m "chore: bump portfolio image to $IMAGE_TAG"'
+    - git push

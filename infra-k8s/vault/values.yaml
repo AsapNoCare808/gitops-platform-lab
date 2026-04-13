@@ -1,0 +1,57 @@
+# HashiCorp Vault — Raft integrated storage
+# helm repo add hashicorp https://helm.releases.hashicorp.com
+# helm upgrade --install vault hashicorp/vault --namespace vault --create-namespace -f values.yaml
+
+server:
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 256Mi
+
+  ha:
+    enabled: false
+
+  standalone:
+    enabled: true
+    config: |
+      ui = true
+
+      listener "tcp" {
+        tls_disable = 1
+        address     = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+
+      storage "raft" {
+        path = "/vault/data"
+        node_id = "vault-0"
+      }
+
+      service_registration "kubernetes" {}
+
+  dataStorage:
+    enabled: true
+    size: 2Gi
+
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt-prod
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    hosts:
+      - host: vault.maxto-platform.cloud
+        paths:
+          - /
+    tls:
+      - hosts:
+          - vault.maxto-platform.cloud
+        secretName: vault-tls
+
+ui:
+  enabled: true
+
+injector:
+  enabled: false   # On utilise ESO, pas l'agent injector

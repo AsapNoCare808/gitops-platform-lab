@@ -1,0 +1,28 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: defectdojo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: lab-platform
+  source:
+    repoURL: https://raw.githubusercontent.com/DefectDojo/django-DefectDojo/helm-charts
+    chart: defectdojo
+    targetRevision: "*"
+    helm:
+      valueFiles:
+        - values.yaml
+      values: |
+        host: defectdojo.maxto-platform.cloud
+        siteUrl: "http://defectdojo.maxto-platform.cloud"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: defectdojo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

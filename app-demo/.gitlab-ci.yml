@@ -1,0 +1,101 @@
+stages:
+  - test
+  - build
+  - scan
+  - deploy
+
+variables:
+  IMAGE_NAME: registry.gitlab.com/mtoris/app-demo
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+
+unit-tests:
+  stage: test
+  image: golang:1.22-alpine
+  script:
+    - go test -v ./...
+
+build-image:
+  stage: build
+  image: docker:24
+  services:
+    - name: docker:24-dind
+      variables:
+        DOCKER_TLS_CERTDIR: ""
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - docker login registry.gitlab.com -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD
+  script:
+    - docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
+    - docker push $IMAGE_NAME:$IMAGE_TAG
+    - docker push $IMAGE_NAME:latest
+  only:
+    - main
+
+trivy-scan:
+  stage: scan
+  image:
+    name: aquasec/trivy:0.61.0
+    entrypoint: [""]
+  variables:
+    TRIVY_USERNAME: $CI_REGISTRY_USER
+    TRIVY_PASSWORD: $CI_REGISTRY_PASSWORD
+  script:
+    - trivy image --exit-code 0 --format json --output trivy-report.json $IMAGE_NAME:$IMAGE_TAG
+    - trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed $IMAGE_NAME:$IMAGE_TAG
+  allow_failure: true
+  artifacts:
+    when: always
+    paths:
+      - trivy-report.json
+    expire_in: 7 days
+  needs:
+    - build-image
+  only:
+    - main
+
+upload-to-defectdojo:
+  stage: scan
+  image: alpine:3.19
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      curl -s -X POST "$DEFECTDOJO_URL/api/v2/import-scan/" \
+        -H "Authorization: Token $DEFECTDOJO_TOKEN" \
+        -F "scan_type=Trivy Scan" \
+        -F "engagement=$DEFECTDOJO_ENGAGEMENT_ID" \
+        -F "file=@trivy-report.json" \
+        -F "minimum_severity=Low" \
+        -F "active=true" \
+        -F "verified=false" \
+        -F "close_old_findings=true" \
+        -F "version=$IMAGE_TAG" | grep -o '"id":[0-9]*' | head -1
+  allow_failure: true
+  needs:
+    - job: trivy-scan
+      artifacts: true
+  only:
+    - main
+
+update-manifests:
+  stage: deploy
+  image: alpine:3.19
+  variables:
+    GIT_STRATEGY: none
+  before_script:
+    - apk add --no-cache git
+    - git config --global user.email ci@gitlab.com
+    - git config --global user.name GitLabCI
+  script:
+    - git clone https://ci-bot:$INFRA_DEPLOY_TOKEN@gitlab.com/Mtoris/infra-k8s.git /tmp/infra
+    - cd /tmp/infra
+    - sed -i "s|image:.*app-demo:.*|image:\ $IMAGE_NAME:$IMAGE_TAG|g" app-demo/deployment.yaml
+    - git add app-demo/deployment.yaml
+    - git diff --cached --quiet || git commit -m "ci bump $IMAGE_TAG"
+    - git push
+  needs:
+    - trivy-scan
+  only:
+    - main

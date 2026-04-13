@@ -1,0 +1,27 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-demo
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: lab-platform
+  source:
+    repoURL: https://gitlab.com/Mtoris/infra-k8s.git
+    targetRevision: main
+    path: app-demo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: app-demo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/spec/containers/0/image   # Géré par le pipeline CI

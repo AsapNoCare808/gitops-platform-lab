@@ -1,0 +1,68 @@
+# kube-prometheus-stack — valeurs minimalistes pour 8Go RAM
+# helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+# helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#   --namespace monitoring -f kube-prometheus-values.yaml
+
+grafana:
+  enabled: true
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    hosts:
+      - grafana.maxto-platform.cloud
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+  adminPassword: "ChangeMe123!"       # À changer ou utiliser un secret K8s
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          folder: Lab
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/default
+  dashboards:
+    default:
+      kubernetes-cluster:
+        gnetId: 7249
+        revision: 1
+        datasource: Prometheus
+      argocd:
+        gnetId: 14584
+        revision: 1
+        datasource: Prometheus
+
+prometheus:
+  prometheusSpec:
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 200m
+      limits:
+        memory: 512Mi
+    retention: 7d
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+alertmanager:
+  enabled: false                  # Désactivé pour le lab
+
+nodeExporter:
+  resources:
+    requests:
+      memory: 32Mi
+
+kubeStateMetrics:
+  resources:
+    requests:
+      memory: 64Mi
