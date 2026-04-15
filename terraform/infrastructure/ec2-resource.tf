@@ -22,31 +22,14 @@ resource "aws_key_pair" "deployer" {
 }
 
 resource "aws_instance" "Infra_GitOps" {
-  ami           = data.aws_ami.amazon.id
-  instance_type = "t3.medium"
-  key_name = aws_key_pair.deployer.key_name
+  ami                         = data.aws_ami.amazon.id
+  instance_type               = "t3.medium"
+  key_name                    = aws_key_pair.deployer.key_name
   associate_public_ip_address = true
-  vpc_security_group_ids = [aws_security_group.allow_tls_ssh.id]
-  subnet_id = aws_subnet.main.id
+  vpc_security_group_ids      = [aws_security_group.allow_tls_ssh.id]
+  subnet_id                   = aws_subnet.main.id
 
   tags = {
     Name = "Infra_GitOps"
-  }
-}
-
-###Backend S3
-
-resource "aws_s3_bucket" "tf_state" {
-  bucket = "my-tfstate-maxtop-latform.cloud" # ⚠️ doit être unique globalement
-
-  tags = {
-    Name = "terraform-state"
-  }
-}
-terraform {
-  backend "s3" {
-    bucket = "my-tfstate-maxtop-latform.cloud"
-    key    = "infrastructure/terraform.tfstate"
-    region = "eu-west-3"
   }
 }
