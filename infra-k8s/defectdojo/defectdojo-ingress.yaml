@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: defectdojo-django-ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/backend-protocol: "HTTP"
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - defectdojo.staging.maxto-platform.cloud
+    secretName: defectdojo-django-tls
+  rules:
+  - host: defectdojo.staging.maxto-platform.cloud
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: defectdojo-django
+              port:
+                number: 80

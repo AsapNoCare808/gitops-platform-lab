@@ -1,6 +1,6 @@
 # DefectDojo — valeurs optimisées pour 8Go RAM
-host: defectdojo.maxto-platform.cloud
-siteUrl: "https://defectdojo.maxto-platform.cloud"
+host: defectdojo.staging.maxto-platform.cloud
+siteUrl: "https://defectdojo.staging.maxto-platform.cloud"
 
 imagePullPolicy: IfNotPresent
 
@@ -62,17 +62,17 @@ valkey:
         memory: 128Mi
 
 extraConfigs:
-  DD_CSRF_TRUSTED_ORIGINS: "https://defectdojo.maxto-platform.cloud"
+  DD_CSRF_TRUSTED_ORIGINS: "https://defectdojo.staging.maxto-platform.cloud"
   DD_CSRF_COOKIE_SECURE: "True"
   DD_SESSION_COOKIE_SECURE: "True"
   DD_SECURE_SSL_REDIRECT: "False"
 
-ingress:
-  enabled: true
-  activateTLS: true
-  secretName: defectdojo-tls
-  annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"
-    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-  ingressClassName: nginx
+# ingress:
+#   enabled: true
+#   activateTLS: true
+#   secretName: defectdojo-tls
+#   annotations:
+#     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+#     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+#     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+#   ingressClassName: traefik

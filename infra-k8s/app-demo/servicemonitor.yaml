@@ -1,14 +1,14 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: app-demo
-  namespace: app-demo
+  name: js-game-app
+  namespace: js-game
   labels:
     release: monitoring
 spec:
   selector:
     matchLabels:
-      app: app-demo
+      app: js-game-app
   endpoints:
     - port: http
       path: /metrics
