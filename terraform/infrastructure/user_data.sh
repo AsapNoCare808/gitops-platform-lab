@@ -84,53 +84,58 @@ spec:
               number: 80
 EOF
 
-# ── 7. App js-game ─────────────────────────────────────────────────────────────
-kubectl create namespace js-game
-
-cat <<'EOF' | kubectl apply -f - -n js-game
+# ── 7. App app-demo ─────────────────────────────────────────────────────────────
+kubectl create namespace app-demo
+kubectl create secret docker-registry regcred -n app-demo \
+  --docker-server=registry.gitlab.com \
+  --docker-username=gitlab+deploy-token-13197591 \
+  --docker-password=gldt-hfus_eiVfGgTYT1VX9s-
+cat <<'EOF' | kubectl apply -f - -n app-demo
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: js-game-app
+  name: app-demo
   labels:
-    app: js-game-app
+    app: app-demo
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: js-game-app
+      app: app-demo
   template:
     metadata:
       labels:
-        app: js-game-app
+        app: app-demo
     spec:
+      imagePullSecrets:
+      - name: regcred
       containers:
-      - name: js-game-app
-        image: internaldev/jsgame:latest
+      - name: app-demo
+        image: registry.gitlab.com/mtoris/app-demo:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 80
+        - containerPort: 8080
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: js-game-app-service
+  name: app-demo
   labels:
-    app: js-game-app
+    app: app-demo
 spec:
   ports:
   - port: 80
     protocol: TCP
-    targetPort: 80
+    targetPort: 8080
   selector:
-    app: js-game-app
+    app: app-demo
   sessionAffinity: None
   type: ClusterIP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: js-game-app-ingress
+  name: app-demo
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
@@ -138,7 +143,7 @@ spec:
   tls:
   - hosts:
     - app.staging.maxto-platform.cloud
-    secretName: js-game-tls
+    secretName: app-demo-tls
   rules:
   - host: app.staging.maxto-platform.cloud
     http:
@@ -147,7 +152,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: js-game-app-service
+            name: app-demo
             port:
               number: 80
 EOF
