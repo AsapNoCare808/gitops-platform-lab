@@ -9,5 +9,6 @@ CLAUDE.md
 *.key
 .env
 **/.terraform/
+**/.terragrunt-cache/
 *.tfstate
 *.tfstate.backup
