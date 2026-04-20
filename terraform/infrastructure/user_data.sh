@@ -33,7 +33,7 @@ metadata:
 spec:
   acme:
     email: toris.maxime@gmail.com
-    server: https://acme-v02.api.letsencrypt.org/directory
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
       name: letsencrypt-prod-key
     solvers:
@@ -145,118 +145,22 @@ spec:
       - CreateNamespace=true
 EOF
 
-# ── 7. App-demo ─────────────────────────────────────────────────────────────
+# ── 7. App-demo pull secret ─────────────────────────────────────────────────
 kubectl create namespace app-demo
 kubectl create secret docker-registry regcred -n app-demo \
   --docker-server=registry.gitlab.com \
   --docker-username=gitlab+deploy-token-13197591 \
   --docker-password=gldt-hfus_eiVfGgTYT1VX9s-
-cat <<'EOF' | kubectl apply -f - -n app-demo
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: app-demo
-  labels:
-    app: app-demo
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: app-demo
-  template:
-    metadata:
-      labels:
-        app: app-demo
-    spec:
-      imagePullSecrets:
-      - name: regcred
-      containers:
-      - name: app-demo
-        image: registry.gitlab.com/mtoris/app-demo:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8080
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: app-demo
-  labels:
-    app: app-demo
-spec:
-  ports:
-  - port: 80
-    protocol: TCP
-    targetPort: 8080
-  selector:
-    app: app-demo
-  sessionAffinity: None
-  type: ClusterIP
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: app-demo
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: traefik
-  tls:
-  - hosts:
-    - app.staging.maxto-platform.cloud
-    secretName: app-demo-tls
-  rules:
-  - host: app.staging.maxto-platform.cloud
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: app-demo
-            port:
-              number: 80
-EOF
 
-# ── 8. DefectDojo ──────────────────────────────────────────────────────────────
-git clone https://github.com/DefectDojo/django-DefectDojo /opt/django-DefectDojo
-cd /opt/django-DefectDojo
-helm dependency update ./helm/defectdojo
 
-helm install defectdojo ./helm/defectdojo \
-  --namespace defectdojo \
+# ── 9. Datadog ─────────────────────────────────────────────────────────────────
+helm repo add datadog https://helm.datadoghq.com
+helm repo update
+helm install datadog-agent datadog/datadog \
+  --namespace monitoring \
   --create-namespace \
-  --set django.ingress.enabled=false \
-  --set createSecret=true \
-  --set createValkeySecret=true \
-  --set createPostgresqlSecret=true \
-  --set "host=defectdojo.staging.maxto-platform.cloud"
-
-cat <<'EOF' | kubectl apply -f - -n defectdojo
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: defectdojo-django-ingress
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: traefik
-  tls:
-  - hosts:
-    - defectdojo.staging.maxto-platform.cloud
-    secretName: defectdojo-django-tls
-  rules:
-  - host: defectdojo.staging.maxto-platform.cloud
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: defectdojo-django
-            port:
-              number: 80
-EOF
+  --set datadog.apiKey=64ae47920b57f576efdd49883f611e33 \
+  --set datadog.site=datadoghq.eu
 
 echo "=== Installation terminée ==="
 echo "ArgoCD password: $(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d)"

@@ -29,6 +29,10 @@ resource "aws_instance" "Infra_GitOps" {
   vpc_security_group_ids      = [aws_security_group.allow_tls_ssh.id]
   subnet_id                   = aws_subnet.main.id
   user_data = file("${path.module}/user_data.sh")
+  root_block_device {
+    volume_size = 20
+    volume_type = "gp3"
+  }
 
   tags = {
     Name = "Infra_GitOps"
