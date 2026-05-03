@@ -5,7 +5,7 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 # ── 1. Packages ────────────────────────────────────────────────────────────────
 yum update -y
-yum install -y git
+yum install -y git jq
 
 # ── 2. k3s ─────────────────────────────────────────────────────────────────────
 curl -sfL https://get.k3s.io | sh -
@@ -145,13 +145,123 @@ spec:
       - CreateNamespace=true
 EOF
 
-# ── 7. App-demo pull secret ─────────────────────────────────────────────────
+# ── 7. App-demo namespace ───────────────────────────────────────────────────
 kubectl create namespace app-demo
-kubectl create secret docker-registry regcred -n app-demo \
-  --docker-server=registry.gitlab.com \
-  --docker-username=gitlab+deploy-token-13197591 \
-  --docker-password=gldt-hfus_eiVfGgTYT1VX9s-
 
+
+# ── 8. Vault ───────────────────────────────────────────────────────────────────
+helm repo add hashicorp https://helm.releases.hashicorp.com
+helm repo update
+helm install vault hashicorp/vault \
+  --namespace vault \
+  --create-namespace \
+  --set injector.enabled=false \
+  --set server.dataStorage.enabled=true \
+  --set server.dataStorage.size=2Gi \
+  --set server.ha.enabled=false \
+  --set server.resources.limits.memory=256Mi \
+  --set server.resources.requests.cpu=100m \
+  --set server.resources.requests.memory=128Mi \
+  --set server.ingress.enabled=true \
+  --set server.ingress.ingressClassName=traefik \
+  --set 'server.ingress.annotations.cert-manager\.io/cluster-issuer=letsencrypt-prod' \
+  --set 'server.ingress.annotations.traefik\.ingress\.kubernetes\.io/router\.entrypoints=websecure' \
+  --set 'server.ingress.hosts[0].host=vault.staging.maxto-platform.cloud' \
+  --set 'server.ingress.hosts[0].paths[0]=/' \
+  --set 'server.ingress.tls[0].hosts[0]=vault.staging.maxto-platform.cloud' \
+  --set 'server.ingress.tls[0].secretName=vault-tls' \
+  --set 'server.standalone.config=ui = true
+listener "tcp" {
+  tls_disable = 1
+  address     = "[::]:8200"
+  cluster_address = "[::]:8201"
+}
+storage "raft" {
+  path    = "/vault/data"
+  node_id = "vault-0"
+}
+service_registration "kubernetes" {}'
+
+until kubectl get pod vault-0 -n vault 2>/dev/null | grep -q Running; do sleep 5; done
+
+# Init Vault et unseal automatique
+VAULT_INIT=$(kubectl exec -n vault vault-0 -- vault operator init -key-shares=1 -key-threshold=1 -format=json)
+UNSEAL_KEY=$(echo "$VAULT_INIT" | jq -r '.unseal_keys_b64[0]')
+ROOT_TOKEN=$(echo "$VAULT_INIT" | jq -r '.root_token')
+kubectl exec -n vault vault-0 -- vault operator unseal -tls-skip-verify "$UNSEAL_KEY"
+
+# Config Vault
+kubectl exec -n vault vault-0 -- sh -c "VAULT_TOKEN=$ROOT_TOKEN vault auth enable kubernetes"
+kubectl exec -n vault vault-0 -- sh -c "VAULT_TOKEN=$ROOT_TOKEN vault secrets enable -path=secret kv-v2"
+kubectl exec -n vault vault-0 -- sh -c "VAULT_TOKEN=$ROOT_TOKEN vault write auth/kubernetes/config kubernetes_host=https://kubernetes.default.svc"
+kubectl exec -n vault vault-0 -- sh -c "echo 'path \"secret/data/*\" { capabilities = [\"read\"] }' > /tmp/eso-policy.hcl && VAULT_TOKEN=$ROOT_TOKEN vault policy write eso-policy /tmp/eso-policy.hcl"
+kubectl exec -n vault vault-0 -- sh -c "VAULT_TOKEN=$ROOT_TOKEN vault write auth/kubernetes/role/eso-role \
+  bound_service_account_names=external-secrets \
+  bound_service_account_namespaces=external-secrets \
+  policies=eso-policy \
+  ttl=1h"
+kubectl exec -n vault vault-0 -- sh -c "VAULT_TOKEN=$ROOT_TOKEN vault kv put secret/gitlab-registry \
+  username=gitlab+deploy-token-13197591 \
+  password=gldt-hfus_eiVfGgTYT1VX9s-"
+
+# ── 8b. ESO ─────────────────────────────────────────────────────────────────
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+helm install external-secrets external-secrets/external-secrets \
+  --namespace external-secrets \
+  --create-namespace
+
+kubectl wait deployment --for=condition=Available -n external-secrets --timeout=120s \
+  external-secrets external-secrets-webhook
+
+cat <<'EOF' | kubectl apply -f -
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: vault-backend
+spec:
+  provider:
+    vault:
+      server: "http://vault.vault.svc.cluster.local:8200"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "eso-role"
+          serviceAccountRef:
+            name: "external-secrets"
+            namespace: "external-secrets"
+EOF
+
+cat <<'EOF' | kubectl apply -f -
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: regcred
+  namespace: app-demo
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: ClusterSecretStore
+  target:
+    name: regcred
+    template:
+      type: kubernetes.io/dockerconfigjson
+      data:
+        .dockerconfigjson: |
+          {"auths":{"registry.gitlab.com":{"username":"{{ .username }}","password":"{{ .password }}","auth":"{{ printf "%s:%s" .username .password | b64enc }}"}}}
+  data:
+  - secretKey: username
+    remoteRef:
+      key: secret/gitlab-registry
+      property: username
+  - secretKey: password
+    remoteRef:
+      key: secret/gitlab-registry
+      property: password
+EOF
 
 # ── 9. Datadog ─────────────────────────────────────────────────────────────────
 helm repo add datadog https://helm.datadoghq.com
@@ -164,4 +274,5 @@ helm install datadog-agent datadog/datadog \
 
 echo "=== Installation terminée ==="
 echo "ArgoCD password: $(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d)"
-echo "DefectDojo password: $(kubectl get secret defectdojo --namespace=defectdojo --output jsonpath='{.data.DD_ADMIN_PASSWORD}' | base64 --decode)"
+echo "Vault unseal key: $UNSEAL_KEY"
+echo "Vault root token: $ROOT_TOKEN"
