@@ -269,7 +269,7 @@ helm repo update
 helm install datadog-agent datadog/datadog \
   --namespace monitoring \
   --create-namespace \
-  --set datadog.apiKey=64ae47920b57f576efdd49883f611e33 \
+  --set datadog.apiKey=${datadog_api_key} \
   --set datadog.site=datadoghq.eu
 
 echo "=== Installation terminée ==="
