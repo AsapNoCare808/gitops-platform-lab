@@ -17,6 +17,37 @@ curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/
 chmod 700 /tmp/get_helm.sh
 /tmp/get_helm.sh
 
+# ── 3b. Traefik redirect HTTP → HTTPS ──────────────────────────────────────────
+until kubectl get crd middlewares.traefik.io 2>/dev/null; do sleep 5; done
+cat <<'EOF' | kubectl apply -f -
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: default
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: http-catchall
+  namespace: default
+spec:
+  entryPoints:
+    - web
+  routes:
+    - match: PathPrefix(`/`)
+      kind: Rule
+      middlewares:
+        - name: redirect-https
+      services:
+        - name: noop@internal
+          kind: TraefikService
+EOF
+
 # ── 4. cert-manager ────────────────────────────────────────────────────────────
 helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
   --namespace cert-manager \
@@ -263,7 +294,61 @@ spec:
       property: password
 EOF
 
-# ── 9. Datadog ─────────────────────────────────────────────────────────────────
+# ── 9. DefectDojo ─────────────────────────────────────────────────────────────
+git clone https://github.com/DefectDojo/django-DefectDojo /opt/django-DefectDojo
+cd /opt/django-DefectDojo
+helm dependency update ./helm/defectdojo
+helm install defectdojo ./helm/defectdojo \
+  --namespace defectdojo \
+  --create-namespace \
+  --set django.ingress.enabled=false \
+  --set createSecret=true \
+  --set createValkeySecret=true \
+  --set createPostgresqlSecret=true \
+  --set "host=defectdojo.staging.maxto-platform.cloud"
+
+cat <<'EOF' | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: defectdojo-django-ingress
+  namespace: defectdojo
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+  - hosts:
+    - defectdojo.staging.maxto-platform.cloud
+    secretName: defectdojo-django-tls
+  rules:
+  - host: defectdojo.staging.maxto-platform.cloud
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: defectdojo-django
+            port:
+              number: 80
+EOF
+
+# Attendre que DefectDojo soit prêt avant de récupérer le password
+kubectl wait deployment -n defectdojo --for=condition=Available --timeout=600s defectdojo-django
+
+DEFECTDOJO_PASSWORD=$(kubectl get secret defectdojo --namespace=defectdojo --output jsonpath='{.data.DD_ADMIN_PASSWORD}' | base64 --decode)
+DEFECTDOJO_URL="https://defectdojo.staging.maxto-platform.cloud"
+
+# Stocker dans SSM Parameter Store
+aws ssm put-parameter --region eu-west-3 --name "/staging/defectdojo/password" --value "$DEFECTDOJO_PASSWORD" --type SecureString --overwrite
+aws ssm put-parameter --region eu-west-3 --name "/staging/defectdojo/url" --value "$DEFECTDOJO_URL" --type String --overwrite
+aws ssm put-parameter --region eu-west-3 --name "/staging/argocd/password" --value "$(kubectl get secret argocd-initial-admin-secret -n argocd -o jsonpath='{.data.password}' | base64 -d)" --type SecureString --overwrite
+aws ssm put-parameter --region eu-west-3 --name "/staging/vault/unseal_key" --value "$UNSEAL_KEY" --type SecureString --overwrite
+aws ssm put-parameter --region eu-west-3 --name "/staging/vault/root_token" --value "$ROOT_TOKEN" --type SecureString --overwrite
+
+# ── 10. Datadog ─────────────────────────────────────────────────────────────────
 helm repo add datadog https://helm.datadoghq.com
 helm repo update
 helm install datadog-agent datadog/datadog \
