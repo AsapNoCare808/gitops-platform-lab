@@ -13,3 +13,4 @@ CLAUDE.md
 *.tfstate
 *.tfstate.backup
 *.tfvars
+terraform/infrastructure/post-apply.tf
